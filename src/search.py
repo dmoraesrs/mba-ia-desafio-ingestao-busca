@@ -68,7 +68,7 @@ def get_llm():
 
     from langchain_google_genai import ChatGoogleGenerativeAI
 
-    return ChatGoogleGenerativeAI(model=os.getenv("GOOGLE_LLM_MODEL", "gemini-2.5-flash-lite"), temperature=0)
+    return ChatGoogleGenerativeAI(model=os.getenv("GOOGLE_LLM_MODEL", "gemini-3.5-flash-lite"), temperature=0)
 
 
 def get_vector_store():
@@ -98,7 +98,7 @@ def search_prompt(question=None):
     def ask(pergunta):
         results = store.similarity_search_with_score(pergunta, k=TOP_K)
         contexto = "\n\n".join(doc.page_content for doc, _score in results)
-        return chain.invoke({"contexto": contexto, "pergunta": pergunta}).content.strip()
+        return chain.invoke({"contexto": contexto, "pergunta": pergunta}).text.strip()
 
     if question:
         return ask(question)

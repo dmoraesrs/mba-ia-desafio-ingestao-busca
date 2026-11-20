@@ -11,6 +11,7 @@ O software lê um PDF, divide o texto em chunks, gera os embeddings e grava os v
 1. Carrega o PDF com `PyPDFLoader`.
 2. Divide em chunks de **1000 caracteres com overlap de 150** (`RecursiveCharacterTextSplitter`).
 3. Gera o embedding de cada chunk e grava no pgVector (`PGVector`). Os chunks recebem ids fixos (`doc-0`, `doc-1`, ...), então rodar a ingestão de novo sobrescreve em vez de duplicar.
+4. Envia os chunks em lotes de 20. Se o provedor responder com limite de requisições (HTTP 429, comum no nível gratuito do Gemini), espera 60 s e tenta de novo, até 5 vezes.
 
 **Busca (`src/search.py`) e chat (`src/chat.py`)**
 
@@ -26,7 +27,7 @@ Funciona com **OpenAI** ou **Google Gemini**. O provedor sai de `LLM_PROVIDER` n
 | Provedor | Embeddings (padrão) | LLM (padrão) |
 |----------|---------------------|--------------|
 | OpenAI | `text-embedding-3-small` | `gpt-5-nano` |
-| Gemini | `models/gemini-embedding-001` | `gemini-2.5-flash-lite` |
+| Gemini | `models/gemini-embedding-001` | `gemini-3.5-flash-lite` |
 
 Os modelos são configuráveis pelas variáveis `*_EMBEDDING_MODEL` e `*_LLM_MODEL`. Nomes de modelo mudam com frequência: confira a documentação do provedor se algum for descontinuado.
 
@@ -75,7 +76,15 @@ docker compose up -d
 python src/ingest.py
 ```
 
-Saída esperada: `Ingestão concluída: 34 páginas, 67 chunks salvos.`
+Saída esperada (as linhas de espera só aparecem quando o limite do nível gratuito é atingido):
+
+```
+Limite de requisições atingido; aguardando 60 s (tentativa 1).
+20/67 chunks gravados.
+...
+67/67 chunks gravados.
+Ingestão concluída: 34 páginas, 67 chunks salvos.
+```
 
 **5. Rodar o chat**
 
@@ -91,17 +100,22 @@ Digite `sair` (ou Ctrl+C) para encerrar.
 Faça sua pergunta (digite 'sair' para encerrar):
 
 PERGUNTA: Qual o faturamento da empresa Alfa Energia S.A.?
-RESPOSTA: O faturamento da Alfa Energia S.A. é de R$ 722.875.391,46.
+RESPOSTA: R$ 722.875.391,46
 
 PERGUNTA: Em que ano foi fundada a Aliança Esportes ME?
-RESPOSTA: A Aliança Esportes ME foi fundada em 2002.
+RESPOSTA: 2002
 
 PERGUNTA: Qual é a capital da França?
 RESPOSTA: Não tenho informações necessárias para responder sua pergunta.
 
 PERGUNTA: Quantos clientes temos em 2024?
 RESPOSTA: Não tenho informações necessárias para responder sua pergunta.
+
+PERGUNTA: Você acha isso bom ou ruim?
+RESPOSTA: Não tenho informações necessárias para responder sua pergunta.
 ```
+
+Saída real com Gemini (`gemini-embedding-001` + `gemini-3.5-flash-lite`).
 
 ## Estrutura do projeto
 
@@ -123,4 +137,5 @@ RESPOSTA: Não tenho informações necessárias para responder sua pergunta.
 |---------|-----------------|
 | `OPENAI_API_KEY não definida no .env` | Faltou copiar o `.env.example` para `.env` ou preencher a chave |
 | `different vector dimensions` na ingestão | O modelo de embeddings mudou: `docker compose down -v`, `docker compose up -d` e ingira de novo |
+| `404 NOT_FOUND ... no longer available` no chat | O modelo foi descontinuado pelo provedor: ajuste `GOOGLE_LLM_MODEL` ou `OPENAI_LLM_MODEL` no `.env` para o modelo indicado na mensagem |
 | `connection refused` na porta 5432 | O banco não está de pé (`docker compose ps`) ou outra aplicação ocupa a porta 5432 |
